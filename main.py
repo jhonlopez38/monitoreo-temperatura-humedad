@@ -111,5 +111,16 @@ def dashboard():
     return FileResponse("static/index.html")
 
 
+# El service worker debe servirse desde la raiz para controlar todo el sitio
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse("static/sw.js", media_type="application/javascript")
+
+
+@app.get("/manifest.json")
+def manifest():
+    return FileResponse("static/manifest.json", media_type="application/manifest+json")
+
+
 if os.path.isdir("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")

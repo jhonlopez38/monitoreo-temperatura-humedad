@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Monitoreo de Temperatura - Facatativa</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f1720">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -12,32 +18,39 @@
     background: #0f1720; color: #e6edf3; padding: 16px;
   }
   .wrap { max-width: 520px; margin: 0 auto; }
-  h1 { font-size: 19px; text-align: center; margin-bottom: 2px; }
-  .online { font-size: 12px; text-align: center; margin-bottom: 16px; }
+
+  .top { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:2px; }
+  .top img { width: 34px; height: 34px; }
+  h1 { font-size: 18px; text-align: center; }
+  .online { font-size: 12px; text-align: center; margin-bottom: 14px; }
   .dot { display:inline-block; width:9px; height:9px; border-radius:50%;
          margin-right:5px; vertical-align:middle; }
+
+  /* Boton instalar */
+  #btnInstalar {
+    display: none; width: 100%; margin-bottom: 14px;
+    background: linear-gradient(135deg,#2ea043,#238636); color:#fff;
+    border: none; border-radius: 12px; padding: 13px; font-size: 15px;
+    font-weight: bold; cursor: pointer;
+  }
+  #btnInstalar:active { transform: scale(.98); }
 
   .card {
     background: #161b22; border-radius: 16px; padding: 20px;
     box-shadow: 0 4px 20px rgba(0,0,0,.4); margin-bottom: 16px;
   }
 
-  /* Lecturas */
   .lecturas { display: flex; justify-content: space-around; text-align: center; }
   .lectura .num { font-size: 40px; font-weight: bold; }
   .lectura .lab { font-size: 12px; color: #8b949e; }
 
-  /* Los 3 estados tipo semaforo */
-  .estados { display: flex; justify-content: space-around; margin-top: 6px; }
+  .estados { display: flex; justify-content: space-around; }
   .est {
     flex: 1; text-align: center; padding: 12px 4px; margin: 0 5px;
     border-radius: 12px; background: #21262d; opacity: .35;
     transition: all .3s; border: 2px solid transparent;
   }
-  .est .bola {
-    width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 6px;
-    background: #444;
-  }
+  .est .bola { width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 6px; background: #444; }
   .est .txt { font-size: 11px; font-weight: bold; }
   .est.activo { opacity: 1; transform: scale(1.06); }
   .est.verde.activo    { border-color:#2ea043; background:#12261a; }
@@ -47,12 +60,9 @@
   .est.rojo.activo     { border-color:#da3633; background:#2a1414; }
   .est.rojo .bola.on   { background:#da3633; box-shadow:0 0 14px #da3633; }
 
-  /* Botones */
   .btns { display:flex; justify-content:center; gap:10px; margin-top:4px; }
-  .btn {
-    border: none; border-radius: 10px; padding: 13px 26px;
-    font-size: 15px; font-weight: bold; cursor: pointer; color: #fff;
-  }
+  .btn { border: none; border-radius: 10px; padding: 13px 26px;
+         font-size: 15px; font-weight: bold; cursor: pointer; color: #fff; }
   .on  { background: #2ea043; } .off { background: #da3633; }
   .sistema { text-align:center; font-size:13px; color:#8b949e; margin-top:12px; }
   .stamp { text-align:center; font-size:11px; color:#6e7681; margin-top:4px; }
@@ -61,10 +71,16 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Monitoreo de Temperatura y Humedad</h1>
+  <div class="top">
+    <img src="/static/icon-192.png" alt="logo">
+    <h1>Monitoreo de Temperatura y Humedad</h1>
+  </div>
   <div class="online" id="online">
     <span class="dot" style="background:#6e7681;"></span>conectando...
   </div>
+
+  <!-- Boton instalar PWA -->
+  <button id="btnInstalar">Instalar aplicacion</button>
 
   <!-- Lecturas -->
   <div class="card">
@@ -115,7 +131,37 @@
 </div>
 
 <script>
-// ---- Grafica ----
+// ================= PWA: registro del service worker =================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
+// ================= PWA: boton instalar =================
+let deferredPrompt;
+const btnInstalar = document.getElementById('btnInstalar');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  btnInstalar.style.display = 'block';  // mostrar el boton
+});
+
+btnInstalar.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  btnInstalar.style.display = 'none';
+});
+
+// Si ya esta instalada, ocultar el boton
+window.addEventListener('appinstalled', () => {
+  btnInstalar.style.display = 'none';
+});
+
+// ================= Grafica =================
 let chart;
 function initChart() {
   const ctx = document.getElementById('grafica').getContext('2d');
@@ -124,10 +170,8 @@ function initChart() {
     data: {
       labels: [],
       datasets: [{
-        label: 'Temp (C)',
-        data: [],
-        borderColor: '#58a6ff',
-        backgroundColor: 'rgba(88,166,255,.12)',
+        label: 'Temp (C)', data: [],
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.12)',
         borderWidth: 2, tension: .35, fill: true,
         pointRadius: 2, pointBackgroundColor: '#58a6ff',
       }]
@@ -143,11 +187,9 @@ function initChart() {
   });
 }
 
-// ---- Pintar los 3 estados ----
+// ================= Pintar los 3 estados =================
 function pintarEstados(e) {
-  const mapa = {
-    'NORMAL': 'est-normal', 'ADVERTENCIA': 'est-adv', 'ALTA': 'est-alta'
-  };
+  const mapa = { 'NORMAL':'est-normal', 'ADVERTENCIA':'est-adv', 'ALTA':'est-alta' };
   ['est-normal','est-adv','est-alta'].forEach(id => {
     const el = document.getElementById(id);
     el.classList.remove('activo');
@@ -162,28 +204,23 @@ function pintarEstados(e) {
 
 function pintarOnline(online) {
   const el = document.getElementById('online');
-  if (online)
-    el.innerHTML = '<span class="dot" style="background:#2ea043;"></span>Dispositivo en linea';
-  else
-    el.innerHTML = '<span class="dot" style="background:#da3633;"></span>Dispositivo fuera de linea';
+  el.innerHTML = online
+    ? '<span class="dot" style="background:#2ea043;"></span>Dispositivo en linea'
+    : '<span class="dot" style="background:#da3633;"></span>Dispositivo fuera de linea';
 }
 
 async function actualizar() {
   try {
     const r = await fetch('/api/estado');
     const d = await r.json();
-
     document.getElementById('temp').innerText = d.temp.toFixed(1);
     document.getElementById('hum').innerText  = d.hum.toFixed(1);
     document.getElementById('sistema').innerText =
       'Sistema: ' + (d.sistema ? 'ENCENDIDO' : 'APAGADO');
     document.getElementById('stamp').innerText =
       d.ultima_actualizacion ? 'Ultimo reporte: ' + d.ultima_actualizacion : '';
-
     pintarEstados(d.sistema ? d.estado : '');
     pintarOnline(d.online);
-
-    // actualizar grafica
     if (d.historial && chart) {
       chart.data.labels = d.historial.map(p => p.hora);
       chart.data.datasets[0].data = d.historial.map(p => p.temp);
