@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoreo de Temperatura - Facatativa</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+    background: #0f1720; color: #e6edf3; padding: 16px;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 19px; text-align: center; margin-bottom: 2px; }
+  .online { font-size: 12px; text-align: center; margin-bottom: 16px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%;
+         margin-right:5px; vertical-align:middle; }
+
+  .card {
+    background: #161b22; border-radius: 16px; padding: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.4); margin-bottom: 16px;
+  }
+
+  /* Lecturas */
+  .lecturas { display: flex; justify-content: space-around; text-align: center; }
+  .lectura .num { font-size: 40px; font-weight: bold; }
+  .lectura .lab { font-size: 12px; color: #8b949e; }
+
+  /* Los 3 estados tipo semaforo */
+  .estados { display: flex; justify-content: space-around; margin-top: 6px; }
+  .est {
+    flex: 1; text-align: center; padding: 12px 4px; margin: 0 5px;
+    border-radius: 12px; background: #21262d; opacity: .35;
+    transition: all .3s; border: 2px solid transparent;
+  }
+  .est .bola {
+    width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 6px;
+    background: #444;
+  }
+  .est .txt { font-size: 11px; font-weight: bold; }
+  .est.activo { opacity: 1; transform: scale(1.06); }
+  .est.verde.activo    { border-color:#2ea043; background:#12261a; }
+  .est.verde .bola.on  { background:#2ea043; box-shadow:0 0 14px #2ea043; }
+  .est.amarillo.activo { border-color:#d29922; background:#2a2410; }
+  .est.amarillo .bola.on { background:#d29922; box-shadow:0 0 14px #d29922; }
+  .est.rojo.activo     { border-color:#da3633; background:#2a1414; }
+  .est.rojo .bola.on   { background:#da3633; box-shadow:0 0 14px #da3633; }
+
+  /* Botones */
+  .btns { display:flex; justify-content:center; gap:10px; margin-top:4px; }
+  .btn {
+    border: none; border-radius: 10px; padding: 13px 26px;
+    font-size: 15px; font-weight: bold; cursor: pointer; color: #fff;
+  }
+  .on  { background: #2ea043; } .off { background: #da3633; }
+  .sistema { text-align:center; font-size:13px; color:#8b949e; margin-top:12px; }
+  .stamp { text-align:center; font-size:11px; color:#6e7681; margin-top:4px; }
+  h2 { font-size:14px; color:#8b949e; margin-bottom:10px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Monitoreo de Temperatura y Humedad</h1>
+  <div class="online" id="online">
+    <span class="dot" style="background:#6e7681;"></span>conectando...
+  </div>
+
+  <!-- Lecturas -->
+  <div class="card">
+    <div class="lecturas">
+      <div class="lectura">
+        <div class="num" id="temp">--</div>
+        <div class="lab">Temperatura (C)</div>
+      </div>
+      <div class="lectura">
+        <div class="num" id="hum" style="font-size:34px;">--</div>
+        <div class="lab">Humedad (%)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Los 3 estados -->
+  <div class="card">
+    <div class="estados">
+      <div class="est verde" id="est-normal">
+        <div class="bola"></div>
+        <div class="txt">NORMAL</div>
+        <div style="font-size:10px;color:#6e7681;">&le; 22 C</div>
+      </div>
+      <div class="est amarillo" id="est-adv">
+        <div class="bola"></div>
+        <div class="txt">ADVERTENCIA</div>
+        <div style="font-size:10px;color:#6e7681;">22 - 25 C</div>
+      </div>
+      <div class="est rojo" id="est-alta">
+        <div class="bola"></div>
+        <div class="txt">ALTA</div>
+        <div style="font-size:10px;color:#6e7681;">&gt; 25 C</div>
+      </div>
+    </div>
+    <div class="btns" style="margin-top:16px;">
+      <button class="btn on"  onclick="cmd('on')">ENCENDER</button>
+      <button class="btn off" onclick="cmd('off')">APAGAR</button>
+    </div>
+    <div class="sistema" id="sistema">Sistema: --</div>
+    <div class="stamp" id="stamp"></div>
+  </div>
+
+  <!-- Grafica -->
+  <div class="card">
+    <h2>Historial de temperatura</h2>
+    <canvas id="grafica" height="180"></canvas>
+  </div>
+</div>
+
+<script>
+// ---- Grafica ----
+let chart;
+function initChart() {
+  const ctx = document.getElementById('grafica').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Temp (C)',
+        data: [],
+        borderColor: '#58a6ff',
+        backgroundColor: 'rgba(88,166,255,.12)',
+        borderWidth: 2, tension: .35, fill: true,
+        pointRadius: 2, pointBackgroundColor: '#58a6ff',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#8b949e' } } },
+      scales: {
+        x: { ticks: { color:'#6e7681', maxTicksLimit:6 }, grid:{ color:'#21262d' } },
+        y: { ticks: { color:'#6e7681' }, grid:{ color:'#21262d' } }
+      }
+    }
+  });
+}
+
+// ---- Pintar los 3 estados ----
+function pintarEstados(e) {
+  const mapa = {
+    'NORMAL': 'est-normal', 'ADVERTENCIA': 'est-adv', 'ALTA': 'est-alta'
+  };
+  ['est-normal','est-adv','est-alta'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('activo');
+    el.querySelector('.bola').classList.remove('on');
+  });
+  if (mapa[e]) {
+    const el = document.getElementById(mapa[e]);
+    el.classList.add('activo');
+    el.querySelector('.bola').classList.add('on');
+  }
+}
+
+function pintarOnline(online) {
+  const el = document.getElementById('online');
+  if (online)
+    el.innerHTML = '<span class="dot" style="background:#2ea043;"></span>Dispositivo en linea';
+  else
+    el.innerHTML = '<span class="dot" style="background:#da3633;"></span>Dispositivo fuera de linea';
+}
+
+async function actualizar() {
+  try {
+    const r = await fetch('/api/estado');
+    const d = await r.json();
+
+    document.getElementById('temp').innerText = d.temp.toFixed(1);
+    document.getElementById('hum').innerText  = d.hum.toFixed(1);
+    document.getElementById('sistema').innerText =
+      'Sistema: ' + (d.sistema ? 'ENCENDIDO' : 'APAGADO');
+    document.getElementById('stamp').innerText =
+      d.ultima_actualizacion ? 'Ultimo reporte: ' + d.ultima_actualizacion : '';
+
+    pintarEstados(d.sistema ? d.estado : '');
+    pintarOnline(d.online);
+
+    // actualizar grafica
+    if (d.historial && chart) {
+      chart.data.labels = d.historial.map(p => p.hora);
+      chart.data.datasets[0].data = d.historial.map(p => p.temp);
+      chart.update('none');
+    }
+  } catch (e) {}
+}
+
+async function cmd(accion) {
+  try {
+    await fetch('/api/comando', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: accion })
+    });
+    setTimeout(actualizar, 500);
+  } catch (e) {}
+}
+
+initChart();
+setInterval(actualizar, 3000);
+actualizar();
+</script>
+</body>
+</html>
