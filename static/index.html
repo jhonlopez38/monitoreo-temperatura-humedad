@@ -3,241 +3,366 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoreo de Temperatura - Facatativa</title>
+<title>MONITOREO AMBIENTAL // FACATATIVA</title>
 
 <!-- PWA -->
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0f1720">
+<meta name="theme-color" content="#05090f">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
+  :root {
+    --bg:#05090f; --panel:#0a121c; --panel2:#0d1826;
+    --cyan:#22d3ee; --cyan-dim:#0e7490;
+    --green:#00ff9c; --amber:#ffb020; --red:#ff3b52;
+    --text:#c8e0f0; --dim:#4a6d85; --line:#123145;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
-    background: #0f1720; color: #e6edf3; padding: 16px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    background:
+      radial-gradient(circle at 20% 0%, #0a1826 0%, var(--bg) 60%),
+      var(--bg);
+    color: var(--text); padding: 14px; min-height: 100vh;
   }
-  .wrap { max-width: 520px; margin: 0 auto; }
+  .wrap { max-width: 560px; margin: 0 auto; }
 
-  .top { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:2px; }
-  .top img { width: 34px; height: 34px; }
-  h1 { font-size: 18px; text-align: center; }
-  .online { font-size: 12px; text-align: center; margin-bottom: 14px; }
-  .dot { display:inline-block; width:9px; height:9px; border-radius:50%;
-         margin-right:5px; vertical-align:middle; }
+  /* Header HUD */
+  .hud {
+    border: 1px solid var(--line); background: var(--panel);
+    padding: 12px 14px; margin-bottom: 14px; position: relative;
+  }
+  .hud::before, .hud::after {
+    content:''; position:absolute; width:10px; height:10px;
+    border-color: var(--cyan); border-style: solid;
+  }
+  .hud::before { top:-1px; left:-1px; border-width:1px 0 0 1px; }
+  .hud::after  { top:-1px; right:-1px; border-width:1px 1px 0 0; }
+  .hud-top { display:flex; align-items:center; gap:10px; }
+  .hud-top img { width:30px; height:30px; }
+  .hud-title { font-size:13px; letter-spacing:2px; color:var(--cyan); font-weight:bold; }
+  .hud-sub { font-size:10px; letter-spacing:1px; color:var(--dim); margin-top:2px; }
+  .status-line {
+    display:flex; align-items:center; gap:6px; margin-top:10px;
+    padding-top:10px; border-top:1px solid var(--line); font-size:11px;
+  }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim);
+         box-shadow:0 0 6px currentColor; }
+  .dot.on { background:var(--green); color:var(--green); animation:blink 1.5s infinite; }
+  .dot.off{ background:var(--red); color:var(--red); }
+  @keyframes blink { 50% { opacity:.4; } }
 
-  /* Boton instalar */
+  /* Botón instalar */
   #btnInstalar {
-    display: none; width: 100%; margin-bottom: 14px;
-    background: linear-gradient(135deg,#2ea043,#238636); color:#fff;
-    border: none; border-radius: 12px; padding: 13px; font-size: 15px;
-    font-weight: bold; cursor: pointer;
+    display:none; width:100%; margin-bottom:14px; cursor:pointer;
+    background:transparent; color:var(--green); border:1px solid var(--green);
+    padding:12px; font-family:inherit; font-size:12px; letter-spacing:2px; font-weight:bold;
   }
-  #btnInstalar:active { transform: scale(.98); }
+  #btnInstalar:active { background:rgba(0,255,156,.1); }
 
-  .card {
-    background: #161b22; border-radius: 16px; padding: 20px;
-    box-shadow: 0 4px 20px rgba(0,0,0,.4); margin-bottom: 16px;
+  /* Paneles */
+  .panel {
+    border:1px solid var(--line); background:var(--panel);
+    margin-bottom:14px; position:relative;
   }
+  .panel-h {
+    font-size:10px; letter-spacing:2px; color:var(--cyan);
+    padding:8px 12px; border-bottom:1px solid var(--line);
+    background:var(--panel2);
+  }
+  .panel-b { padding:16px 14px; }
 
-  .lecturas { display: flex; justify-content: space-around; text-align: center; }
-  .lectura .num { font-size: 40px; font-weight: bold; }
-  .lectura .lab { font-size: 12px; color: #8b949e; }
+  /* Lecturas */
+  .lecturas { display:flex; justify-content:space-around; text-align:center; }
+  .lectura .num { font-size:30px; font-weight:bold; color:var(--text); }
+  .lectura .num small { font-size:14px; color:var(--dim); }
+  .lectura .lab { font-size:9px; letter-spacing:1px; color:var(--dim); margin-top:4px; }
+  .lectura.t .num { color:#5cc8ff; }
+  .lectura.h .num { color:var(--green); }
+  .lectura.p .num { color:var(--amber); }
 
-  .estados { display: flex; justify-content: space-around; }
+  /* Estados semáforo */
+  .estados { display:flex; justify-content:space-around; gap:8px; }
   .est {
-    flex: 1; text-align: center; padding: 12px 4px; margin: 0 5px;
-    border-radius: 12px; background: #21262d; opacity: .35;
-    transition: all .3s; border: 2px solid transparent;
+    flex:1; text-align:center; padding:12px 4px; border:1px solid var(--line);
+    background:var(--panel2); opacity:.4; transition:all .3s;
   }
-  .est .bola { width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 6px; background: #444; }
-  .est .txt { font-size: 11px; font-weight: bold; }
-  .est.activo { opacity: 1; transform: scale(1.06); }
-  .est.verde.activo    { border-color:#2ea043; background:#12261a; }
-  .est.verde .bola.on  { background:#2ea043; box-shadow:0 0 14px #2ea043; }
-  .est.amarillo.activo { border-color:#d29922; background:#2a2410; }
-  .est.amarillo .bola.on { background:#d29922; box-shadow:0 0 14px #d29922; }
-  .est.rojo.activo     { border-color:#da3633; background:#2a1414; }
-  .est.rojo .bola.on   { background:#da3633; box-shadow:0 0 14px #da3633; }
+  .est .bola { width:22px; height:22px; border-radius:50%; margin:0 auto 7px;
+               background:#1a2b3a; border:1px solid var(--line); }
+  .est .txt { font-size:10px; letter-spacing:1px; font-weight:bold; }
+  .est .rng { font-size:8px; color:var(--dim); margin-top:3px; }
+  .est.activo { opacity:1; }
+  .est.verde.activo    { border-color:var(--green); box-shadow:0 0 12px rgba(0,255,156,.3) inset; }
+  .est.verde .bola.on  { background:var(--green); box-shadow:0 0 12px var(--green); border-color:var(--green); }
+  .est.amarillo.activo { border-color:var(--amber); box-shadow:0 0 12px rgba(255,176,32,.3) inset; }
+  .est.amarillo .bola.on { background:var(--amber); box-shadow:0 0 12px var(--amber); border-color:var(--amber); }
+  .est.rojo.activo     { border-color:var(--red); box-shadow:0 0 12px rgba(255,59,82,.3) inset; }
+  .est.rojo .bola.on   { background:var(--red); box-shadow:0 0 12px var(--red); border-color:var(--red); }
 
-  .btns { display:flex; justify-content:center; gap:10px; margin-top:4px; }
-  .btn { border: none; border-radius: 10px; padding: 13px 26px;
-         font-size: 15px; font-weight: bold; cursor: pointer; color: #fff; }
-  .on  { background: #2ea043; } .off { background: #da3633; }
-  .sistema { text-align:center; font-size:13px; color:#8b949e; margin-top:12px; }
-  .stamp { text-align:center; font-size:11px; color:#6e7681; margin-top:4px; }
-  h2 { font-size:14px; color:#8b949e; margin-bottom:10px; text-align:center; }
+  /* Botones */
+  .btns { display:flex; gap:10px; margin-top:16px; }
+  .btn {
+    flex:1; cursor:pointer; font-family:inherit; font-size:12px; letter-spacing:2px;
+    font-weight:bold; padding:13px; background:transparent; border:1px solid;
+  }
+  .on  { color:var(--green); border-color:var(--green); }
+  .on:active  { background:rgba(0,255,156,.12); }
+  .off { color:var(--red); border-color:var(--red); }
+  .off:active { background:rgba(255,59,82,.12); }
+  .auto { color:var(--cyan); border-color:var(--cyan); }
+  .auto:active { background:rgba(34,211,238,.12); }
+  .btn.sel { background:rgba(255,255,255,.06); box-shadow:0 0 10px currentColor inset; }
+
+  /* Ventilador */
+  .vent-box {
+    display:flex; align-items:center; gap:12px; margin-top:16px;
+    padding:12px 14px; border:1px solid var(--line); background:var(--panel2);
+  }
+  .fan { font-size:30px; color:var(--dim); display:inline-block; line-height:1; }
+  .fan.spin { color:var(--cyan); animation:girar 1.1s linear infinite; }
+  @keyframes girar { to { transform:rotate(360deg); } }
+  .vent-lab { font-size:9px; letter-spacing:1px; color:var(--dim); }
+  .vent-val { font-size:15px; font-weight:bold; letter-spacing:1px; }
+  .vent-val.on  { color:var(--cyan); }
+  .vent-val.off { color:var(--dim); }
+  .modo-box { margin-left:auto; font-size:10px; letter-spacing:1px; color:var(--dim); }
+  .modo-box b { color:var(--cyan); }
+
+  .sistema { text-align:center; font-size:11px; letter-spacing:1px; color:var(--dim); margin-top:14px; }
+  .sistema b { color:var(--cyan); }
+  .stamp { text-align:center; font-size:10px; color:var(--dim); margin-top:5px; }
+
+  /* Consola */
+  .consola {
+    height:130px; overflow-y:auto; font-size:10px; line-height:1.7;
+    padding:10px 12px; color:var(--dim);
+  }
+  .consola .ln { white-space:nowrap; }
+  .consola .t { color:var(--cyan-dim); }
+  .consola .g { color:var(--green); }
+  .consola .a { color:var(--amber); }
+  .consola .r { color:var(--red); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="top">
-    <img src="/static/icon-192.png" alt="logo">
-    <h1>Monitoreo de Temperatura y Humedad</h1>
-  </div>
-  <div class="online" id="online">
-    <span class="dot" style="background:#6e7681;"></span>conectando...
-  </div>
 
-  <!-- Boton instalar PWA -->
-  <button id="btnInstalar">Instalar aplicacion</button>
-
-  <!-- Lecturas -->
-  <div class="card">
-    <div class="lecturas">
-      <div class="lectura">
-        <div class="num" id="temp">--</div>
-        <div class="lab">Temperatura (C)</div>
+  <!-- HEADER HUD -->
+  <div class="hud">
+    <div class="hud-top">
+      <img src="/static/icon-192.png" alt="logo">
+      <div>
+        <div class="hud-title">MONITOREO AMBIENTAL</div>
+        <div class="hud-sub">FACATATIVA // SISTEMA BME280</div>
       </div>
-      <div class="lectura">
-        <div class="num" id="hum" style="font-size:34px;">--</div>
-        <div class="lab">Humedad (%)</div>
-      </div>
+    </div>
+    <div class="status-line">
+      <span class="dot" id="dot"></span>
+      <span id="online">CONECTANDO...</span>
     </div>
   </div>
 
-  <!-- Los 3 estados -->
-  <div class="card">
-    <div class="estados">
-      <div class="est verde" id="est-normal">
-        <div class="bola"></div>
-        <div class="txt">NORMAL</div>
-        <div style="font-size:10px;color:#6e7681;">&le; 22 C</div>
-      </div>
-      <div class="est amarillo" id="est-adv">
-        <div class="bola"></div>
-        <div class="txt">ADVERTENCIA</div>
-        <div style="font-size:10px;color:#6e7681;">22 - 25 C</div>
-      </div>
-      <div class="est rojo" id="est-alta">
-        <div class="bola"></div>
-        <div class="txt">ALTA</div>
-        <div style="font-size:10px;color:#6e7681;">&gt; 25 C</div>
-      </div>
+  <button id="btnInstalar">▼ INSTALAR APLICACION</button>
+
+  <!-- LECTURAS -->
+  <div class="panel">
+    <div class="panel-h">// PARAMETROS EN TIEMPO REAL</div>
+    <div class="panel-b lecturas">
+      <div class="lectura t"><div class="num" id="temp">--<small>C</small></div><div class="lab">TEMPERATURA</div></div>
+      <div class="lectura h"><div class="num" id="hum">--<small>%</small></div><div class="lab">HUMEDAD</div></div>
+      <div class="lectura p"><div class="num" id="pres">--<small>hPa</small></div><div class="lab">PRESION</div></div>
     </div>
-    <div class="btns" style="margin-top:16px;">
-      <button class="btn on"  onclick="cmd('on')">ENCENDER</button>
-      <button class="btn off" onclick="cmd('off')">APAGAR</button>
-    </div>
-    <div class="sistema" id="sistema">Sistema: --</div>
-    <div class="stamp" id="stamp"></div>
   </div>
 
-  <!-- Grafica -->
-  <div class="card">
-    <h2>Historial de temperatura</h2>
-    <canvas id="grafica" height="180"></canvas>
+  <!-- ESTADO -->
+  <div class="panel">
+    <div class="panel-h">// ESTADO DEL SISTEMA</div>
+    <div class="panel-b">
+      <div class="estados">
+        <div class="est verde" id="est-normal">
+          <div class="bola"></div><div class="txt">NORMAL</div><div class="rng">&le; 22 C</div>
+        </div>
+        <div class="est amarillo" id="est-adv">
+          <div class="bola"></div><div class="txt">ADVERTENCIA</div><div class="rng">22-25 C</div>
+        </div>
+        <div class="est rojo" id="est-alta">
+          <div class="bola"></div><div class="txt">ALTA</div><div class="rng">&gt; 25 C</div>
+        </div>
+      </div>
+
+      <!-- Estado del ventilador -->
+      <div class="vent-box">
+        <span class="fan" id="fan">&#10052;</span>
+        <div>
+          <div class="vent-lab">VENTILADOR</div>
+          <div class="vent-val" id="vent-val">--</div>
+        </div>
+        <div class="modo-box">MODO: <b id="modo-val">--</b></div>
+      </div>
+
+      <!-- Botones de control del ventilador -->
+      <div class="btns">
+        <button class="btn on"   id="b-on"   onclick="cmd('on')">■ ENCENDER</button>
+        <button class="btn auto" id="b-auto" onclick="cmd('auto')">↻ AUTO</button>
+        <button class="btn off"  id="b-off"  onclick="cmd('off')">■ APAGAR</button>
+      </div>
+      <div class="stamp" id="stamp"></div>
+    </div>
   </div>
+
+  <!-- GRAFICA -->
+  <div class="panel">
+    <div class="panel-h">// HISTORIAL // TEMP / HUMEDAD / PRESION</div>
+    <div class="panel-b"><canvas id="grafica" height="200"></canvas></div>
+  </div>
+
+  <!-- CONSOLA -->
+  <div class="panel">
+    <div class="panel-h">&gt; CONSOLA DEL SISTEMA</div>
+    <div class="consola" id="consola"></div>
+  </div>
+
 </div>
 
 <script>
-// ================= PWA: registro del service worker =================
+// ================= PWA =================
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 }
-
-// ================= PWA: boton instalar =================
 let deferredPrompt;
 const btnInstalar = document.getElementById('btnInstalar');
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; btnInstalar.style.display='block'; });
+btnInstalar.addEventListener('click', async ()=>{ if(!deferredPrompt)return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; btnInstalar.style.display='none'; });
+window.addEventListener('appinstalled', ()=>{ btnInstalar.style.display='none'; });
 
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  btnInstalar.style.display = 'block';  // mostrar el boton
-});
+// ================= Consola =================
+const consolaEl = document.getElementById('consola');
+let logs = [];
+function hora(){ return new Date().toLocaleTimeString('es-CO',{hour12:false}); }
+function log(msg, tipo='') {
+  logs.push(`<div class="ln"><span class="t">[${hora()}]</span> <span class="${tipo}">${msg}</span></div>`);
+  if (logs.length > 30) logs.shift();
+  consolaEl.innerHTML = logs.join('');
+  consolaEl.scrollTop = consolaEl.scrollHeight;
+}
+log('INICIANDO INTERFAZ...', 't');
 
-btnInstalar.addEventListener('click', async () => {
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  await deferredPrompt.userChoice;
-  deferredPrompt = null;
-  btnInstalar.style.display = 'none';
-});
-
-// Si ya esta instalada, ocultar el boton
-window.addEventListener('appinstalled', () => {
-  btnInstalar.style.display = 'none';
-});
-
-// ================= Grafica =================
+// ================= Grafica (3 ejes) =================
 let chart;
 function initChart() {
   const ctx = document.getElementById('grafica').getContext('2d');
   chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        label: 'Temp (C)', data: [],
-        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.12)',
-        borderWidth: 2, tension: .35, fill: true,
-        pointRadius: 2, pointBackgroundColor: '#58a6ff',
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { labels: { color: '#8b949e' } } },
-      scales: {
-        x: { ticks: { color:'#6e7681', maxTicksLimit:6 }, grid:{ color:'#21262d' } },
-        y: { ticks: { color:'#6e7681' }, grid:{ color:'#21262d' } }
+    type:'line',
+    data:{ labels:[], datasets:[
+      { label:'Temp (C)', data:[], yAxisID:'yTemp',
+        borderColor:'#5cc8ff', backgroundColor:'rgba(92,200,255,.10)',
+        borderWidth:2, tension:.35, fill:true, pointRadius:1.5, pointBackgroundColor:'#5cc8ff' },
+      { label:'Humedad (%)', data:[], yAxisID:'yHum',
+        borderColor:'#00ff9c', backgroundColor:'rgba(0,255,156,.05)',
+        borderWidth:2, tension:.35, fill:false, pointRadius:1.5, pointBackgroundColor:'#00ff9c' },
+      { label:'Presion (hPa)', data:[], yAxisID:'yPres',
+        borderColor:'#ffb020', backgroundColor:'rgba(255,176,32,.05)',
+        borderWidth:2, tension:.35, fill:false, pointRadius:1.5, pointBackgroundColor:'#ffb020' }
+    ]},
+    options:{
+      responsive:true,
+      plugins:{ legend:{ labels:{ color:'#c8e0f0', font:{ family:'Consolas', size:10 } } } },
+      scales:{
+        x:{ ticks:{ color:'#4a6d85', maxTicksLimit:6, font:{ size:9 } }, grid:{ color:'#123145' } },
+        yTemp:{ type:'linear', position:'left',  ticks:{ color:'#5cc8ff', font:{ size:9 } }, grid:{ color:'#123145' }, title:{ display:true, text:'C', color:'#5cc8ff' } },
+        yHum: { type:'linear', position:'right', ticks:{ color:'#00ff9c', font:{ size:9 } }, grid:{ drawOnChartArea:false }, title:{ display:true, text:'%', color:'#00ff9c' } },
+        yPres:{ type:'linear', position:'right', ticks:{ color:'#ffb020', font:{ size:9 } }, grid:{ drawOnChartArea:false }, title:{ display:true, text:'hPa', color:'#ffb020' } }
       }
     }
   });
 }
 
-// ================= Pintar los 3 estados =================
+// ================= Estados =================
+let estadoPrevio = null, onlinePrevio = null, ventPrevio = null;
 function pintarEstados(e) {
   const mapa = { 'NORMAL':'est-normal', 'ADVERTENCIA':'est-adv', 'ALTA':'est-alta' };
-  ['est-normal','est-adv','est-alta'].forEach(id => {
-    const el = document.getElementById(id);
-    el.classList.remove('activo');
-    el.querySelector('.bola').classList.remove('on');
+  ['est-normal','est-adv','est-alta'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.classList.remove('activo'); el.querySelector('.bola').classList.remove('on');
   });
   if (mapa[e]) {
-    const el = document.getElementById(mapa[e]);
-    el.classList.add('activo');
-    el.querySelector('.bola').classList.add('on');
+    const el=document.getElementById(mapa[e]);
+    el.classList.add('activo'); el.querySelector('.bola').classList.add('on');
   }
 }
 
 function pintarOnline(online) {
-  const el = document.getElementById('online');
-  el.innerHTML = online
-    ? '<span class="dot" style="background:#2ea043;"></span>Dispositivo en linea'
-    : '<span class="dot" style="background:#da3633;"></span>Dispositivo fuera de linea';
+  const dot=document.getElementById('dot'), txt=document.getElementById('online');
+  dot.classList.toggle('on', online); dot.classList.toggle('off', !online);
+  txt.innerText = online ? 'DISPOSITIVO EN LINEA' : 'DISPOSITIVO FUERA DE LINEA';
+  if (onlinePrevio !== online) {
+    log(online ? 'CONEXION ESTABLECIDA' : 'CONEXION PERDIDA', online?'g':'r');
+    onlinePrevio = online;
+  }
 }
 
 async function actualizar() {
   try {
-    const r = await fetch('/api/estado');
-    const d = await r.json();
-    document.getElementById('temp').innerText = d.temp.toFixed(1);
-    document.getElementById('hum').innerText  = d.hum.toFixed(1);
-    document.getElementById('sistema').innerText =
-      'Sistema: ' + (d.sistema ? 'ENCENDIDO' : 'APAGADO');
-    document.getElementById('stamp').innerText =
-      d.ultima_actualizacion ? 'Ultimo reporte: ' + d.ultima_actualizacion : '';
-    pintarEstados(d.sistema ? d.estado : '');
+    const r = await fetch('/api/estado'); const d = await r.json();
+    document.getElementById('temp').innerHTML = d.temp.toFixed(1)+'<small>C</small>';
+    document.getElementById('hum').innerHTML  = d.hum.toFixed(1)+'<small>%</small>';
+    document.getElementById('pres').innerHTML = d.pres.toFixed(1)+'<small>hPa</small>';
+    document.getElementById('stamp').innerText = d.ultima_actualizacion ? 'ULTIMO REPORTE: '+d.ultima_actualizacion : '';
+
+    // LEDs / estados siempre segun temperatura
+    pintarEstados(d.online ? d.estado : '');
     pintarOnline(d.online);
+
+    // Estado del ventilador
+    const fan = document.getElementById('fan');
+    const ventVal = document.getElementById('vent-val');
+    if (d.ventilador) {
+      fan.classList.add('spin');
+      ventVal.innerText = 'ENCENDIDO'; ventVal.className = 'vent-val on';
+    } else {
+      fan.classList.remove('spin');
+      ventVal.innerText = 'APAGADO'; ventVal.className = 'vent-val off';
+    }
+    document.getElementById('modo-val').innerText = d.modo || '--';
+
+    // Resaltar el boton del modo activo
+    ['b-on','b-auto','b-off'].forEach(id => document.getElementById(id).classList.remove('sel'));
+    if (d.modo === 'ON')   document.getElementById('b-on').classList.add('sel');
+    if (d.modo === 'AUTO') document.getElementById('b-auto').classList.add('sel');
+    if (d.modo === 'OFF')  document.getElementById('b-off').classList.add('sel');
+
+    // Log de cambios de estado de temperatura
+    const est = d.estado;
+    if (d.online && est !== estadoPrevio) {
+      const icono = { 'NORMAL':'[OK]', 'ADVERTENCIA':'[!]', 'ALTA':'[X]' };
+      const clase = { 'NORMAL':'g', 'ADVERTENCIA':'a', 'ALTA':'r' };
+      log(`${icono[est]||''} ESTADO: ${est} // ${d.temp.toFixed(1)}C ${d.hum.toFixed(1)}% ${d.pres.toFixed(1)}hPa`, clase[est]||'');
+      estadoPrevio = est;
+    }
+    // Log de cambios del ventilador
+    if (d.online && d.ventilador !== ventPrevio) {
+      log(d.ventilador ? '>> VENTILADOR ENCENDIDO' : '>> VENTILADOR APAGADO', d.ventilador ? 'g' : '');
+      ventPrevio = d.ventilador;
+    }
+
     if (d.historial && chart) {
-      chart.data.labels = d.historial.map(p => p.hora);
-      chart.data.datasets[0].data = d.historial.map(p => p.temp);
+      chart.data.labels = d.historial.map(p=>p.hora);
+      chart.data.datasets[0].data = d.historial.map(p=>p.temp);
+      chart.data.datasets[1].data = d.historial.map(p=>p.hum);
+      chart.data.datasets[2].data = d.historial.map(p=>p.pres);
       chart.update('none');
     }
-  } catch (e) {}
+  } catch(e) {}
 }
 
 async function cmd(accion) {
   try {
-    await fetch('/api/comando', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: accion })
-    });
+    await fetch('/api/comando',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({accion}) });
+    const txt = { 'on':'MANUAL ON', 'off':'MANUAL OFF', 'auto':'MODO AUTOMATICO' };
+    log('COMANDO: VENTILADOR '+(txt[accion]||accion.toUpperCase()), 'a');
     setTimeout(actualizar, 500);
-  } catch (e) {}
+  } catch(e) {}
 }
 
 initChart();
