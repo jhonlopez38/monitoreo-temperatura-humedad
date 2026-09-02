@@ -143,6 +143,22 @@
   .consola .g { color:var(--green); }
   .consola .a { color:var(--amber); }
   .consola .r { color:var(--red); }
+
+  /* Historico */
+  .filtros { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .filtro { flex:1; min-width:90px; }
+  .filtro label { display:block; font-size:9px; letter-spacing:1px; color:var(--dim); margin-bottom:4px; }
+  .filtro select, .filtro input {
+    width:100%; background:var(--panel2); border:1px solid var(--line);
+    color:var(--text); padding:8px; font-family:inherit; font-size:12px; border-radius:0;
+  }
+  .btn-consultar {
+    width:100%; background:transparent; color:var(--cyan); border:1px solid var(--cyan);
+    padding:11px; font-family:inherit; font-size:12px; letter-spacing:2px; font-weight:bold;
+    cursor:pointer; margin-bottom:12px;
+  }
+  .btn-consultar:active { background:rgba(34,211,238,.12); }
+  .hist-info { font-size:11px; color:var(--dim); text-align:center; margin-bottom:10px; letter-spacing:1px; }
 </style>
 </head>
 <body>
@@ -221,6 +237,30 @@
   <div class="panel">
     <div class="panel-h">&gt; CONSOLA DEL SISTEMA</div>
     <div class="consola" id="consola"></div>
+  </div>
+
+  <!-- HISTORICO -->
+  <div class="panel">
+    <div class="panel-h">// HISTORICO DE REGISTROS</div>
+    <div class="panel-b">
+      <div class="filtros">
+        <div class="filtro">
+          <label>FECHA</label>
+          <select id="f-fecha"></select>
+        </div>
+        <div class="filtro">
+          <label>DESDE</label>
+          <input type="time" id="f-desde">
+        </div>
+        <div class="filtro">
+          <label>HASTA</label>
+          <input type="time" id="f-hasta">
+        </div>
+      </div>
+      <button class="btn-consultar" onclick="consultarHistorico()">CONSULTAR</button>
+      <div class="hist-info" id="hist-info">Selecciona una fecha y consulta.</div>
+      <canvas id="grafica-hist" height="200"></canvas>
+    </div>
   </div>
 
 </div>
@@ -365,7 +405,86 @@ async function cmd(accion) {
   } catch(e) {}
 }
 
+// ================= HISTORICO =================
+let chartHist;
+function initChartHist() {
+  const ctx = document.getElementById('grafica-hist').getContext('2d');
+  chartHist = new Chart(ctx, {
+    type:'line',
+    data:{ labels:[], datasets:[
+      { label:'Temp (C)', data:[], yAxisID:'yT',
+        borderColor:'#5cc8ff', backgroundColor:'rgba(92,200,255,.10)',
+        borderWidth:2, tension:.3, fill:true, pointRadius:1 },
+      { label:'Humedad (%)', data:[], yAxisID:'yH',
+        borderColor:'#00ff9c', borderWidth:2, tension:.3, fill:false, pointRadius:1 },
+      { label:'Presion (hPa)', data:[], yAxisID:'yP',
+        borderColor:'#ffb020', borderWidth:2, tension:.3, fill:false, pointRadius:1 }
+    ]},
+    options:{
+      responsive:true,
+      plugins:{ legend:{ labels:{ color:'#c8e0f0', font:{ family:'Consolas', size:10 } } } },
+      scales:{
+        x:{ ticks:{ color:'#4a6d85', maxTicksLimit:8, font:{ size:8 } }, grid:{ color:'#123145' } },
+        yT:{ type:'linear', position:'left',  ticks:{ color:'#5cc8ff', font:{ size:9 } }, grid:{ color:'#123145' } },
+        yH:{ type:'linear', position:'right', ticks:{ color:'#00ff9c', font:{ size:9 } }, grid:{ drawOnChartArea:false } },
+        yP:{ type:'linear', position:'right', ticks:{ color:'#ffb020', font:{ size:9 } }, grid:{ drawOnChartArea:false } }
+      }
+    }
+  });
+}
+
+async function cargarFechas() {
+  try {
+    const r = await fetch('/api/historico');
+    const d = await r.json();
+    const sel = document.getElementById('f-fecha');
+    sel.innerHTML = '';
+    if (d.fechas.length === 0) {
+      const o = document.createElement('option');
+      o.text = 'Sin registros aun'; sel.appendChild(o);
+    } else {
+      d.fechas.forEach(f => {
+        const o = document.createElement('option');
+        o.value = f; o.text = f; sel.appendChild(o);
+      });
+      // seleccionar la ultima fecha
+      sel.value = d.fechas[d.fechas.length - 1];
+    }
+  } catch(e) {}
+}
+
+async function consultarHistorico() {
+  const fecha = document.getElementById('f-fecha').value;
+  const desde = document.getElementById('f-desde').value;
+  const hasta = document.getElementById('f-hasta').value;
+  let url = '/api/historico?';
+  if (fecha) url += 'fecha=' + fecha + '&';
+  if (desde) url += 'desde=' + desde + '&';
+  if (hasta) url += 'hasta=' + hasta;
+
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    const info = document.getElementById('hist-info');
+    if (d.registros.length === 0) {
+      info.innerText = 'No hay registros en ese rango.';
+      chartHist.data.labels = [];
+      chartHist.data.datasets.forEach(ds => ds.data = []);
+      chartHist.update('none');
+      return;
+    }
+    info.innerText = d.total + ' registros | ' + fecha;
+    chartHist.data.labels = d.registros.map(x => x.hora);
+    chartHist.data.datasets[0].data = d.registros.map(x => x.temp);
+    chartHist.data.datasets[1].data = d.registros.map(x => x.hum);
+    chartHist.data.datasets[2].data = d.registros.map(x => x.pres);
+    chartHist.update('none');
+  } catch(e) {}
+}
+
 initChart();
+initChartHist();
+cargarFechas();
 setInterval(actualizar, 3000);
 actualizar();
 </script>
